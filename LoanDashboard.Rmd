@@ -1,0 +1,238 @@
+---
+title: "Loan Default"
+author: "Alex Pecho"
+output: 
+ rmarkdown::github_document:
+    theme: cosmo
+    orientation: columns
+    navbar:
+      - { icon: "fa-linkedin", href: "https://www.linkedin.com/in/alexanderpecho/",align: right}
+    source_code: embed
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(DataExplorer)
+library(ggplot2)
+library(plotly)
+library(plyr)
+library(readr)
+library(DT)
+library(reshape2)
+library(tidyverse)
+
+df <- read_csv("Loan_Default.csv")
+df2 <- subset(df, select = c(Interest_rate_spread, Upfront_charges, rate_of_interest, Status))
+```
+
+Introduction
+=======================================================================
+
+Column {data-width=650}
+-----------------------------------------------------------------------
+
+### Table discription
+<font size ="4">
+The table below are a few variables from the data set.
+
+Also, I have put credit score into a range instead of being a list of individual scores. </font>
+
+
+### A few variables in the data set
+```{r}
+df1 <- subset(df, select = c(loan_type, Credit_Worthiness, age, Security_Type, term, credit_type,  Credit_Score, property_value, approv_in_adv, income, Status, submission_of_application))
+
+
+#Put credit score into a range and label the data depending on the score.
+df1$Credit_Score[df1$Credit_Score >= 0 & df1$Credit_Score <=629] <- "Bad"
+df1$Credit_Score[df1$Credit_Score >= 630 & df1$Credit_Score <= 689] <- "Fair"
+df1$Credit_Score[df1$Credit_Score >= 690 & df1$Credit_Score <= 719] <- "Good"
+df1$Credit_Score[df1$Credit_Score >= 720 & df1$Credit_Score <= 900] <- "Excellent"
+
+#Use the library DT to print a data table of 10 data entries.
+datatable(head(df1, n=10))
+```
+
+
+
+Column {.tabset data-width=500}
+-----------------------------------------------------------------------
+
+Data was taken from Kaggle [Loan Default Dataset](https://www.kaggle.com/datasets/yasserh/loan-default-dataset?select=Loan_Default.csv).
+
+The data set consists of 34 variables and 150,000 rows before modification
+
+### Objective
+<font size ="4">
+The purpose of exploration to this data set is to determine the factors that influence defaulting on a loan.
+
+Our original Hypothesis stated Age, Credit Score, and Submission of Application, would be correlated to loan default.
+
+In turn, through exploration we found the missing values in Interest Rate Spread, Upfront Charges, and Rate of Interest. were correlated to loan default. Which will be shown throughout this dashboard. </font>
+
+### Modification
+
+<font size ="4">
+Variables such as:
+
+-Year
+
+-ID
+
+were removed since the data is only for 2019, and ID should have no correlation to default.
+
+Also data types were changed for better analysis. such as credit score being put into ranges. and age being averaged and changed to a numeric. </font>
+
+Data Exploration
+=======================================================================
+
+Column {.tabset data-width=575}
+----------------------------------------------------------------------
+
+
+### Determining Default
+
+First we find what value in status represents default. By the bar plot below we can see that value is 1 since we assume defaulting is less likely
+
+
+```{r}
+p1 <- ggplot(df2, aes(x=reorder(Status, Status, function(x)-length(x)))) +
+  geom_bar(fill='blue') + labs(x="Status")
+ggplotly(p1)
+
+```
+
+### Missing observations
+
+
+Then it was important to observe where data was missing. This was done using the library DataExplorer. Here are a few of the variables without observations.
+
+
+```{r} 
+
+DataExplo <- subset(df, select = c(loan_limit, income, LTV, property_value, dtir1, rate_of_interest, Interest_rate_spread, Upfront_charges))
+
+p2 <- plot_missing(DataExplo)
+ggplotly(p2)
+```
+
+### testing original hypothesis
+
+Before running a regression, I wanted to look at if age, credit score, or submission of application had any surprising proportions compared to default. Graphs of the three variables compared to status and indexed by default or not defaulted can be seen below.
+
+It is notable that even though these variables all contain default cases. The proportions match the sample size which suggests they are not predictive. Therefore, we must look at other variables.
+
+```{r}
+
+dfHypot1 <- subset(df1, select = c(Credit_Score, age, Status, submission_of_application))
+dfHypot1 <- na.omit(dfHypot1)
+
+# plot of Age and Status color Status NA removed
+ggplot(dfHypot1, aes(x = age, y = Status, color = sort(Status))) + 
+  geom_bar(stat = "identity") + xlab("Age Range") + ylab("Status Observations") + labs(color='Status') + 
+  ggtitle("Age x Status")
+# plot of Credit score and Status fill Status
+ggplot(dfHypot1, aes(x=Credit_Score, y = Status, fill = sort(Status))) +
+  geom_bar(stat = "identity")+ xlab("Credit_Score") + ylab("Status Observations") + labs(fill='Status') + 
+  ggtitle("Age x Credit_Score")
+# plot of Submit of App and Status fill Status NA removed
+ggplot(dfHypot1, aes(x=submission_of_application, y = Status, fill = sort(Status))) +
+  geom_bar(stat = "identity")+ xlab("submission_of_application") + ylab("Status Observations") + labs(fill='Status') + 
+  ggtitle("Age x Submission of application")
+
+```
+
+Column {data-width=425}
+-----------------------------------------------------------------------
+
+
+### Summary of exploration
+<font size ="3.5">
+At the beginning my main focus was to find a correlation to default with columns that were near complete. Mainly avoiding, interest rate spread, rate of interest, and upfront charges. Since uncollected data may not be important if it was not collected.
+
+I began by splitting the data into a two data frames, test and train using caTools, with proportions of 80/20 respectively. and when ran will randomly select those proportions, to avoid any error. 
+
+Therefore, Most efforts were focused on modeling data that were nearly complete. This was preformed by using tables and prop tables for low factor variables. and running continuous variables through logistic regression and comparing McFadden's Pseudo R squared.
+
+There ended up being no major findings or direct correlation from these methods.
+
+On the left is some of my preliminary exploration and how the original hypothesis was tested.
+</font>
+
+Findings
+=======================================================================
+
+Column {.tabset data-width=500}
+----------------------------------------------------------------------
+
+
+### Correlation of missing data
+
+The bar plot below shows how indexing missing values in rate of interest, interest rate spread, and upfront charges correlates to default. Where 1 associated with default coming from those three variables. And 2 is associated with default coming from other variables in the data set.
+
+```{r}
+
+index <- which(is.na(df$rate_of_interest)&is.na(df$Interest_rate_spread)&is.na(df$Upfront_charges))
+df$missing <- 0
+df$missing[index] <- 1
+
+df$missingL <- df$missing
+
+index2 <- which(df$missing != df$Status)
+df$missing[index2] <- 2
+
+dfModeling <- subset(df, select = c(missing, Status))
+
+ggplot(dfModeling, aes(x=missing, y = Status)) +
+  geom_bar(stat = "identity", fill = "blue") + xlim(0.5,2.5) + 
+  xlab("Defaults in missing data") + ylab("Count of defaults") + ggtitle("defaults in three variables")
+
+
+```
+
+
+### Logistic Curve
+
+Below is a representation of the Sigmoid curve used in logistic regression. From the curve, as missing observations increase (x-axis) probability of default begins to increases (y-axis). Note: this curve is not an accurate representation of the data, but is good for illustration purpose.  
+
+
+```{r}
+ggplot(df, aes(x=missingL, y=Status)) + geom_point() +
+  stat_smooth(method="glm", color="Blue", se=FALSE,
+              method.args = list(family=binomial)) + xlab("Missing observations")
+```
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+
+### Summary of findings
+<font size ="4">
+When running the logistic regression, R was removing all missing values. Which removed all default values with it. Thus we determined defaulting must be associated with missing observations.
+
+When nothing came up I wanted to see if there was a correlation between missing observations and loan default. Thus, we indexed the missing values of interest rate spread, rate of interest, and upfront charges. If there was a missing observation we assigned it a 1 and if not we gave it a 0.
+
+Then we looked at a table comparing default and out new variable that indexed missing entries. Here we found approximately 99.45% of defaulting values were coming from just those three variables (over the full data set).
+
+After finding this, I used the train part of the data set to built the model, run it through the logistic regression, and used McFadden's pseudo R squared to check fit. After running the model a couple times through different train sets, I found accuracy from a low-end of 93% to a high-end of 98.5% approximately. Thus we may conclude this is an accurate finding and missing data in rate of interest, interest rate spread, and upfront charges is correlated to loan default. Similar results were seen by applying the model to the test set after.
+</font>
+
+About Me
+=======================================================================
+
+Column {data-width=650}
+-----------------------------------------------------------------------
+
+### Chart A
+
+<font size ="5">
+
+Hello, my name is Alexander Pecho. I am a senior at the University of Dayton with expected graduation in May 2022.
+
+This project was done to further my understanding of R and data analytics. It was completed with assistance from my Statistics professor Dr. Ying-Ju Tessa Chen. 
+
+ - Currently, I am pursuing a B.S. in Applied Mathematical Economics accompanied with a minor in Actuarial Science
+
+I am interested in pursuing a career in data analytics or actuarial science. I have coding experience in R, Python, Java.
+
+Find me on [LinkedIn](https://www.linkedin.com/in/alexanderpecho/)! </font>
+
